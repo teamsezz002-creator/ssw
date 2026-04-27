@@ -17,22 +17,20 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Logging middleware to debug 404s
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
+
   app.use(express.json());
 
   const uploadDir = path.join(process.cwd(), "uploads");
   const simDir = path.join(uploadDir, "simulations");
+  const logsPath = path.join(uploadDir, "tracking_logs.jsonl");
 
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
   if (!fs.existsSync(simDir)) fs.mkdirSync(simDir);
-  
-  console.log(`[Server] Upload directory: ${uploadDir}`);
-  console.log(`[Server] Simulations directory: ${simDir}`);
-  try {
-    const existingSims = fs.readdirSync(simDir);
-    console.log(`[Server] Found ${existingSims.length} existing simulations:`, existingSims);
-  } catch (e) {
-    console.warn(`[Server] Could not list simulations directory`);
-  }
 
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -62,13 +60,31 @@ async function startServer() {
     },
   });
 
+  const apiRouter = express.Router();
+
+  // Debug route to see registered paths
+  apiRouter.get("/debug/routes", (req, res) => {
+    const routes = apiRouter.stack
+      .filter((r: any) => r.route)
+      .map((r: any) => ({
+        path: r.route.path,
+        methods: Object.keys(r.route.methods)
+      }));
+    res.json(routes);
+  });
+
+  apiRouter.get("/health", (req, res) => {
+    res.json({ status: "ok", env: process.env.NODE_ENV });
+  });
+
   // Serve tracking.js
   app.get("/tracking.js", (req, res) => {
     res.sendFile(path.join(process.cwd(), "public", "tracking.js"));
   });
 
-  // Upload and Extract
-  app.post("/api/upload", (req, res, next) => {
+  // API Routes
+  apiRouter.post("/upload", (req, res, next) => {
+    console.log(`[API] Upload request received: ${req.method} ${req.url}`);
     upload.single("simulation")(req, res, (err) => {
       if (err) {
         console.error("Multer Error:", err);
@@ -77,6 +93,7 @@ async function startServer() {
       next();
     });
   }, async (req, res) => {
+    // ... logic remains same ...
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -162,11 +179,9 @@ async function startServer() {
           const dest = path.join(extractPath, item);
           if (src === dest) continue;
           
-          // Use a temporary name if dest already exists (unlikely in fresh extract)
           if (fs.existsSync(dest)) {
              try {
                if (fs.statSync(dest).isDirectory()) {
-                 // Skip if it's the folder we are coming from
                  if (dest === entryDir) continue;
                }
              } catch(e) {}
@@ -184,14 +199,9 @@ async function startServer() {
       // Inject tracking.js and fix absolute paths in index.html
       let html = fs.readFileSync(indexPath, "utf8");
       
-      // Fix absolute paths (scripts, links, img) to be relative so it works in subdirectories
-      // Replace src="/path" with src="path", etc.
       html = html.replace(/(src|href)="\/([^"]*)"/g, (match, attr, pathValue) => {
-        // Skip purely root paths or external URLs if they somehow match
         if (!pathValue || pathValue.startsWith('http')) return match;
-        // Don't break special cases like /tracking.js which we actually WANT from root or relative
         if (pathValue === 'tracking.js') return `${attr}="/${pathValue}"`;
-        
         return `${attr}="${pathValue}"`;
       });
 
@@ -220,8 +230,7 @@ async function startServer() {
     }
   });
 
-  // Create a sample simulation for testing
-  app.post("/api/create-sample", (req, res) => {
+  apiRouter.post("/create-sample", (req, res) => {
     const simId = "sample-lab-" + Math.floor(Math.random() * 1000);
     const extractPath = path.join(simDir, simId);
     
@@ -287,7 +296,6 @@ async function startServer() {
 
         function saveProgress() {
             showStatus('Progress Saved to Portal');
-            // Portal handles progress via sim messages or direct fetch if we implemented resume API
             console.log('Sim state saved');
         }
 
@@ -309,32 +317,20 @@ async function startServer() {
     }
   });
 
-  // Serve static simulations
-  app.use("/simulations", express.static(simDir));
-
-  // Tracking API
-  const logsPath = path.join(uploadDir, "tracking_logs.jsonl");
-  app.post("/api/track", (req, res) => {
+  apiRouter.post("/track", (req, res) => {
     const event = req.body;
     fs.appendFileSync(logsPath, JSON.stringify(event) + "\n");
     res.json({ success: true });
   });
 
-  app.get("/api/stats", (req, res) => {
+  apiRouter.get("/stats", (req, res) => {
     try {
       if (!fs.existsSync(logsPath)) return res.json({ totalEvents: 0, events: [], sessions: 0, typeDistribution: {} });
-      
       const content = fs.readFileSync(logsPath, "utf8");
       const events = content.trim().split("\n").map(line => {
-        try {
-          return JSON.parse(line);
-        } catch (e) {
-          return null;
-        }
+        try { return JSON.parse(line); } catch (e) { return null; }
       }).filter(Boolean);
-
-      // Simple aggregation
-      const stats = {
+      res.json({
         totalEvents: events.length,
         events: events,
         sessions: Array.from(new Set(events.map((e: any) => e.sessionId))).length,
@@ -342,16 +338,13 @@ async function startServer() {
           acc[e.type] = (acc[e.type] || 0) + 1;
           return acc;
         }, {}),
-      };
-
-      res.json(stats);
+      });
     } catch (e) {
       res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
-  // Get simulations list
-  app.get("/api/simulations", (req, res) => {
+  apiRouter.get("/simulations", (req, res) => {
     try {
       const sims = fs.readdirSync(simDir).map(simId => {
         const simPath = path.join(simDir, simId, "index.html");
@@ -366,6 +359,12 @@ async function startServer() {
     }
   });
 
+  // Mount API router
+  app.use("/api", apiRouter);
+
+  // Serve static simulations
+  app.use("/simulations", express.static(simDir));
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -377,6 +376,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
+      console.log(`[Fallback] Serving index.html for: ${req.url}`);
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
