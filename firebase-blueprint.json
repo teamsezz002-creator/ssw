@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["student", "instructor", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Simulation": {
+      "title": "Simulation",
+      "description": "Metadata for an uploaded simulation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "path": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "path"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "A single session of a user playing a simulation",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "simId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "duration": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "completed"] }
+      },
+      "required": ["sessionId", "userId", "simId", "startTime"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "A specific action tracked within a simulation",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "simId": { "type": "string" },
+        "type": { "type": "string" },
+        "data": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "userId", "simId", "type", "timestamp"]
+    },
+    "Progress": {
+      "title": "Progress",
+      "description": "User progress in a simulation for resuming",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "simId": { "type": "string" },
+        "currentLevel": { "type": "string" },
+        "completedSteps": { "type": "array", "items": { "type": "string" } },
+        "state": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "simId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User details" },
+    "/simulations/{simId}": { "schema": "Simulation", "description": "Simulation metadata" },
+    "/sessions/{sessionId}": { "schema": "Session", "description": "Learning sessions" },
+    "/sessions/{sessionId}/events/{eventId}": { "schema": "Event", "description": "Granular session events" },
+    "/progress/{progressId}": { "schema": "Progress", "description": "Saved progress (ID is userId_simId)" }
+  }
+}
