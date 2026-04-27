@@ -46,10 +46,18 @@ async function startServer() {
   const upload = multer({
     storage,
     fileFilter: (req, file, cb) => {
-      if (file.mimetype === "application/zip" || file.mimetype === "application/x-zip-compressed") {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (
+        file.mimetype === "application/zip" || 
+        file.mimetype === "application/x-zip-compressed" ||
+        file.mimetype === "application/x-zip" ||
+        file.mimetype === "multipart/x-zip" ||
+        file.mimetype === "application/octet-stream" ||
+        ext === ".zip"
+      ) {
         cb(null, true);
       } else {
-        cb(new Error("Only .zip files are allowed"));
+        cb(new Error(`Only .zip files are allowed. Received: ${file.mimetype} and extension: ${ext}`));
       }
     },
   });
@@ -60,7 +68,15 @@ async function startServer() {
   });
 
   // Upload and Extract
-  app.post("/api/upload", upload.single("simulation"), async (req, res) => {
+  app.post("/api/upload", (req, res, next) => {
+    upload.single("simulation")(req, res, (err) => {
+      if (err) {
+        console.error("Multer Error:", err);
+        return res.status(400).json({ error: err.message });
+      }
+      next();
+    });
+  }, async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -364,6 +380,16 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // Global Error Handler for API routes
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Global error handler:", err);
+    if (req.path.startsWith('/api/')) {
+      res.status(500).json({ error: err.message || "Internal server error" });
+    } else {
+      next(err);
+    }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

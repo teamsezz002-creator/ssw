@@ -47,16 +47,26 @@ export default function Home() {
         method: 'POST',
         body: formData
       });
-      const data = await res.json();
-      if (data.success) {
+      
+      let data;
+      const isJson = res.headers.get('content-type')?.includes('application/json');
+      if (isJson) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}...`);
+      }
+
+      if (res.ok && data.success) {
         toast.success('Simulation uploaded and extracted');
         setOpen(false);
         fetchSimulations();
       } else {
         toast.error(data.error || 'Upload failed');
       }
-    } catch (e) {
-      toast.error('Upload failed');
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e.message || 'Upload failed due to network error');
     } finally {
       setIsUploading(false);
     }
