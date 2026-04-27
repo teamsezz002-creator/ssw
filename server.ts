@@ -374,11 +374,23 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      console.log(`[Fallback] Serving index.html for: ${req.url}`);
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      console.log(`[Server] Serving production static files from: ${distPath}`);
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        if (req.url.startsWith('/api/')) {
+          console.warn(`[API] 404 Not Found: ${req.method} ${req.url}`);
+          return res.status(404).json({ error: "API endpoint not found" });
+        }
+        console.log(`[Fallback] Serving index.html for: ${req.url}`);
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      console.error(`[Server] Critical Error: dist folder not found at ${distPath}. Build might have failed.`);
+      app.get("*", (req, res) => {
+        res.status(500).send("Application not built. Please run npm run build.");
+      });
+    }
   }
 
   // Global Error Handler for API routes
