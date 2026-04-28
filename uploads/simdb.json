@@ -34,6 +34,13 @@
       "status": "ready",
       "buildDir": "/app/applet/uploads/simulations/interactive-conductivity-lab/repo/teamsezz002-creator-interactive-conductivity-lab-76c38b9",
       "serveDir": "/app/applet/uploads/simulations/interactive-conductivity-lab/repo/teamsezz002-creator-interactive-conductivity-lab-76c38b9/dist"
+    },
+    {
+      "id": "Chemlab",
+      "createdAt": 1777358907831,
+      "status": "ready",
+      "buildDir": "/app/applet/uploads/simulations/Chemlab/repo/teamsezz002-creator-Chemlab-9dd052f",
+      "serveDir": "/app/applet/uploads/simulations/Chemlab/repo/teamsezz002-creator-Chemlab-9dd052f/dist"
     }
   ],
   "events": [
@@ -1212,6 +1219,30 @@
       },
       "timestamp": "2026-04-28T06:45:06.091Z",
       "serverTime": 1777358685391
+    },
+    {
+      "id": "event-1777358840838-6q4l9",
+      "userId": "i68IglDHgAU3IJcoWwHV78F7Aas1",
+      "simId": "Light-Lab",
+      "sessionId": "sess-e0pmxtfwf",
+      "type": "SIMULATION_START",
+      "data": {
+        "url": "https://ais-dev-6d53yjgwmu2l3kxcvmpgxx-215410776253.asia-east1.run.app/api/simRender/Light-Lab/index.html?userId=i68IglDHgAU3IJcoWwHV78F7Aas1&simId=Light-Lab"
+      },
+      "timestamp": "2026-04-28T06:47:41.526Z",
+      "serverTime": 1777358840838
+    },
+    {
+      "id": "event-1777358884260-l4n3v",
+      "userId": "i68IglDHgAU3IJcoWwHV78F7Aas1",
+      "simId": "Light-Lab",
+      "sessionId": "sess-e0pmxtfwf",
+      "type": "SIMULATION_HEARTBEAT",
+      "data": {
+        "duration": 43.438
+      },
+      "timestamp": "2026-04-28T06:48:24.948Z",
+      "serverTime": 1777358884260
     }
   ]
 }

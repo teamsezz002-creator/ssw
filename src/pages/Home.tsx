@@ -157,7 +157,7 @@ export default function Home() {
         ) : (
           simulations.map((sim, i) => (
             <motion.div
-              key={sim.id}
+              key={`${sim.id}-${i}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
