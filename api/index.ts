@@ -6,8 +6,13 @@ import fs from "fs";
 import path from "path";
 import { exec } from "child_process";
 
-const app = express();
-app.use(express.json());
+const router = express.Router();
+
+router.use((req, res, next) => {
+  console.log(`[API-Router] Received request: ${req.method} ${req.url}`);
+  next();
+});
+router.use(express.json());
 
 // In-memory multer is fine for downloading the zip
 const upload = multer({
@@ -350,13 +355,13 @@ const handleImportRepo = async (req: Request, res: Response) => {
 };
 
 // Route Registration
-app.get("/health", (req, res) => res.json({ status: "ok" }));
-app.get("/simulations", getSimulations);
-app.post("/track", handleTrack);
-app.get("/stats", getStats);
-app.post("/upload", upload.single("simulation"), handleUpload);
-app.post("/import-repo", handleImportRepo);
-app.get("/trigger-build/:simId", (req, res) => {
+router.get("/health", (req, res) => res.json({ status: "ok" }));
+router.get("/simulations", getSimulations);
+router.post("/track", handleTrack);
+router.get("/stats", getStats);
+router.post("/upload", upload.single("simulation"), handleUpload);
+router.post("/import-repo", handleImportRepo);
+router.get("/trigger-build/:simId", (req, res) => {
     const db = getDb();
     const sim = db.simulations.find((s: any) => s.id === req.params.simId);
     if (!sim) return res.status(404).send("Sim not found");
@@ -365,10 +370,10 @@ app.get("/trigger-build/:simId", (req, res) => {
     startBuild(sim.id, sim.buildDir);
     res.send("Build started");
 });
-app.post("/create-sample", handleCreateSample);
-app.get("/simRender/:simId/*", handleSimRender);
+router.post("/create-sample", handleCreateSample);
+router.get("/simRender/:simId/*", handleSimRender);
 
-export default app;
+export default router;
 
 
 

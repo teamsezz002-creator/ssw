@@ -3,7 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import apiApp from "./api/index.ts";
+import apiRouter from "./api/index.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +22,7 @@ async function startServer() {
   app.use(express.static(path.join(process.cwd(), "public")));
 
   // Mount API router
-  app.use("/api", apiApp);
+  app.use("/api", apiRouter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
