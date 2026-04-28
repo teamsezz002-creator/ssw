@@ -1,12 +1,33 @@
-import express, { Request, Response, NextFunction } from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import multer from "multer";
 import AdmZip from "adm-zip";
 import mime from "mime-types";
 import fs from "fs";
 import path from "path";
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 
 const router = express.Router();
+
+// Clean up stale building statuses on startup
+try {
+    const DB_FILE = path.join(process.cwd(), "uploads", "simdb.json");
+    if (fs.existsSync(DB_FILE)) {
+      const db = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+      let changed = false;
+      if (db.simulations) {
+        db.simulations.forEach((sim: any) => {
+          if (sim.status === 'building') {
+            sim.status = 'error';
+            sim.errorLog = 'Build was interrupted (server restarted).';
+            changed = true;
+          }
+        });
+      }
+      if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf8");
+    }
+} catch (e) {
+    console.error("Failed to clean up stale builds:", e);
+}
 
 router.use((req, res, next) => {
   console.log(`[API-Router] Received request: ${req.method} ${req.url}`);
@@ -46,9 +67,21 @@ function saveDb(data: any) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf8");
 }
 
+function getSimulationsByRecent(simulations: any[]) {
+  return [...simulations].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
 const getSimulations = async (req: Request, res: Response) => {
   const db = getDb();
-  res.json(db.simulations.map((s: any) => ({
+  // Deduplicate by ID, keeping the most recent one
+  const uniqueSims: any = {};
+  getSimulationsByRecent(db.simulations).forEach((s: any) => {
+    if (!uniqueSims[s.id]) {
+      uniqueSims[s.id] = s;
+    }
+  });
+
+  res.json(Object.values(uniqueSims).map((s: any) => ({
     id: s.id,
     title: s.id.replace(/-/g, ' '),
     path: `/api/simRender/${s.id}/index.html`,
@@ -100,14 +133,62 @@ const startBuild = (simId: string, buildDir: string) => {
   if (fs.existsSync(pkgPath)) {
     // Needs build
     console.log(`[Build] Executing build for ${simId} in ${buildDir}`);
-    exec("npm install && npm run build", { cwd: buildDir }, (err, stdout, stderr) => {
-      fs.writeFileSync(path.join(buildDir, "build.log"), `Errors: ${err}\nStdout: ${stdout}\nStderr: ${stderr}`);
-      const db = getDb();
-      const sim = db.simulations.find((s: any) => s.id === simId);
-      if (err) {
+    const logStream = fs.createWriteStream(path.join(buildDir, "build.log"));
+    
+    // Using spawn to avoid buffer overflow
+    const child = spawn("npm", ["install", "--no-audit", "--no-fund", "--legacy-peer-deps"], { cwd: buildDir, shell: true });
+    
+    child.stdout.pipe(logStream, { end: false });
+    child.stderr.pipe(logStream, { end: false });
+    
+    child.on('close', (code: number) => {
+        if (code !== 0) {
+            logStream.end();
+            handleBuildError(new Error(`npm install failed with code ${code}`));
+            return;
+        }
+        
+        const buildChild = spawn("npm", ["run", "build"], { cwd: buildDir, shell: true });
+        buildChild.stdout.pipe(logStream, { end: false });
+        buildChild.stderr.pipe(logStream, { end: false });
+        
+        buildChild.on('close', (buildCode: number) => {
+            logStream.end();
+            if (buildCode !== 0) {
+                handleBuildError(new Error(`npm run build failed with code ${buildCode}`));
+                return;
+            }
+            handleBuildSuccess();
+        });
+    });
+
+    function handleBuildError(err: Error) {
         console.error(`[Build] Error building ${simId}:`, err);
-        if (sim) { sim.status = 'error'; sim.errorLog = stderr; saveDb(db); }
-      } else {
+        const db = getDb();
+        const sim = db.simulations
+            .filter((s: any) => s.id === simId && s.status === 'building')
+            .sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+            
+        if (sim) {
+            sim.status = 'error';
+            sim.errorLog = err.message + '\nCheck build.log for details.';
+            saveDb(db);
+        } else {
+            const fallbackSim = db.simulations.find((s: any) => s.id === simId);
+            if (fallbackSim) {
+                fallbackSim.status = 'error';
+                fallbackSim.errorLog = err.message + '\nCheck build.log for details.';
+                saveDb(db);
+            }
+        }
+    }
+
+    function handleBuildSuccess() {
+        const db = getDb();
+        const sim = db.simulations
+            .filter((s: any) => s.id === simId && s.status === 'building')
+            .sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+
         console.log(`[Build] Finished for ${simId}`);
         // Check if dist/ or build/ created
         let outDir = path.join(buildDir, "dist");
@@ -116,7 +197,7 @@ const startBuild = (simId: string, buildDir: string) => {
           if (fs.existsSync(buildDirAlt)) {
             outDir = buildDirAlt;
           } else {
-            // If neither dist/ nor build/ exist, assume the root of buildDir was the output (e.g., static)
+            // If neither dist/ nor build/ exist, assume the root of buildDir was the output
             outDir = buildDir;
           }
         }
@@ -133,8 +214,7 @@ const startBuild = (simId: string, buildDir: string) => {
         }
 
         if (sim) { sim.status = 'ready'; sim.serveDir = outDir; saveDb(db); }
-      }
-    });
+    }
   } else {
     // Static HTML
     console.log(`[Build] No package.json found for ${simId}, treating as static HTML.`);
@@ -182,14 +262,20 @@ const handleUpload = async (req: Request, res: Response) => {
     }
 
     const db = getDb();
-    const existing = db.simulations.find((s: any) => s.id === simId);
-    if (existing) {
+    // Update the most recent one or create new
+    const sims = db.simulations.filter((s: any) => s.id === simId);
+    if (sims.length > 0) {
+      // Sort to get the most recent
+      sims.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+      const existing = sims[0];
       existing.status = 'building';
       existing.updatedAt = Date.now();
-      existing.buildDir = buildDir; // important to update buildDir
+      existing.buildDir = buildDir;
+      existing.errorLog = undefined; // clear previous error
     } else {
       db.simulations.push({
         id: simId,
+        title: req.body.title || req.file.originalname.replace(".zip", ""),
         createdAt: Date.now(),
         status: 'building',
         buildDir: buildDir
@@ -285,11 +371,21 @@ const handleImportRepo = async (req: Request, res: Response) => {
   fs.mkdirSync(repoDir, { recursive: true });
 
   const db = getDb();
-  db.simulations.push({
-    id: simId,
-    createdAt: Date.now(),
-    status: 'building'
-  });
+  const existingSims = db.simulations.filter((s: any) => s.id === simId);
+  if (existingSims.length > 0) {
+    existingSims.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+    const existing = existingSims[0];
+    existing.status = 'building';
+    existing.updatedAt = Date.now();
+    existing.errorLog = undefined;
+  } else {
+    db.simulations.push({
+      id: simId,
+      title: repoFullName.split('/')[1] || repoFullName,
+      createdAt: Date.now(),
+      status: 'building'
+    });
+  }
   saveDb(db);
 
   res.json({ success: true, simId });
@@ -298,11 +394,17 @@ const handleImportRepo = async (req: Request, res: Response) => {
   (async () => {
     try {
       // 1. Fetch zipball
+      const headers: Record<string, string> = {
+        'User-Agent': 'NodeJS',
+        'Accept': 'application/vnd.github.v3+json'
+      };
+      if (token) headers['Authorization'] = `token ${token}`;
+
       let zipUrl = `https://api.github.com/repos/${repoFullName}/zipball/main`;
       
       let res1 = await fetch(zipUrl, {
         method: "GET",
-        headers: { 'Authorization': `token ${token}` },
+        headers: headers,
         redirect: 'manual'
       });
       
@@ -310,9 +412,14 @@ const handleImportRepo = async (req: Request, res: Response) => {
          zipUrl = `https://api.github.com/repos/${repoFullName}/zipball/master`;
          res1 = await fetch(zipUrl, {
             method: "GET",
-            headers: { 'Authorization': `token ${token}` },
+            headers: headers,
             redirect: 'manual'
           });
+      }
+
+      if (![301, 302].includes(res1.status)) {
+         const errorText = await res1.text();
+         throw new Error(`GitHub API Error: ${res1.status} ${errorText}`);
       }
 
       const location = res1.headers.get('location');
@@ -321,11 +428,20 @@ const handleImportRepo = async (req: Request, res: Response) => {
       const zipRes = await fetch(location);
       if (!zipRes.ok) throw new Error("Could not download zipball");
       
-      const buffer = Buffer.from(await zipRes.arrayBuffer());
-      
-      // Save zip to file
       const zipPath = path.join(simDir, "temp.zip");
-      fs.writeFileSync(zipPath, buffer);
+      const destStream = fs.createWriteStream(zipPath);
+      
+      if (!zipRes.body) throw new Error("No response body");
+      // @ts-ignore
+      for await (const chunk of zipRes.body) {
+        destStream.write(chunk);
+      }
+      destStream.end();
+      
+      await new Promise((resolve, reject) => {
+          destStream.on('finish', resolve);
+          destStream.on('error', reject);
+      });
       
       // Extraction
       const zip = new AdmZip(zipPath);
@@ -369,6 +485,48 @@ router.get("/trigger-build/:simId", (req, res) => {
     saveDb(db);
     startBuild(sim.id, sim.buildDir);
     res.send("Build started");
+});
+router.post("/delete-simulation/:simId", (req, res) => {
+    const simId = decodeURIComponent(req.params.simId);
+    console.log(`[API] Deleting all simulations with id: ${simId}`);
+    const db = getDb();
+    
+    // Find all matching simulations
+    const simsToDelete = db.simulations.filter((s: any) => s.id === simId);
+    
+    if (simsToDelete.length === 0) {
+        console.error(`[API] No simulation found with id: ${simId}`);
+        // If it's not in DB, try to delete the folder anyway just in case
+        const simDir = path.join(UPLOADS_DIR, simId);
+        if (fs.existsSync(simDir)) {
+            try {
+                fs.rmSync(simDir, { recursive: true, force: true });
+            } catch(e) {}
+        }
+        return res.json({ success: true, deleted: 0, note: "Not found in DB but folder cleanup attempted" });
+    }
+
+    // Delete files for each and remove from db
+    for (const sim of simsToDelete) {
+        const simDir = path.join(UPLOADS_DIR, sim.id);
+        console.log(`[API] Deleting directory: ${simDir}`);
+        if (fs.existsSync(simDir)) {
+            // Use sync rm to avoid async issues in route handler
+            try {
+                fs.rmSync(simDir, { recursive: true, force: true });
+                console.log(`[API] Directory deleted: ${simDir}`);
+            } catch (err) {
+                console.error(`[API] Error deleting directory: ${simDir}`, err);
+            }
+        }
+    }
+
+    // Filter out all simulations with the given ID
+    db.simulations = db.simulations.filter((s: any) => s.id !== simId);
+    
+    saveDb(db);
+    console.log(`[API] Simulation(s) deleted from db`);
+    res.json({ success: true, deleted: simsToDelete.length });
 });
 router.post("/create-sample", handleCreateSample);
 router.get("/simRender/:simId/*", handleSimRender);

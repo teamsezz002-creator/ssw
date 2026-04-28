@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/card';
-import { Plus, Play, Info, RotateCcw } from 'lucide-react';
+import { Plus, Play, Info, RotateCcw, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
@@ -164,7 +164,35 @@ export default function Home() {
             >
               <Card className="group hover:shadow-lg transition-shadow">
                 <CardHeader>
-                  <CardTitle className="capitalize">{sim.title}</CardTitle>
+                    <div className="flex justify-between items-start">
+                    <CardTitle className="capitalize">{sim.title || sim.id?.replace(/-/g, ' ')}</CardTitle>
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-neutral-500 hover:text-red-600"
+                        onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (confirm(`Are you sure you want to delete ${sim.title || sim.id?.replace(/-/g, ' ')}?`)) {
+                                try {
+                                    const res = await fetch(`/api/delete-simulation/${encodeURIComponent(sim.id)}`, { method: 'POST' });
+                                    if (res.ok) {
+                                        toast.success('Simulation deleted');
+                                        fetchSimulations();
+                                    } else {
+                                        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+                                        toast.error(errorData.error || 'Failed to delete simulation');
+                                        fetchSimulations(); // Refresh anyway in case it was a partial fail
+                                    }
+                                } catch (e) {
+                                    toast.error('Failed to delete simulation due to connection error');
+                                }
+                            }
+                        }}
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                   <CardDescription>Interactive scientific model</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -192,7 +220,15 @@ export default function Home() {
                         Building Deployment...
                      </Button>
                   ) : sim.status === 'error' ? (
-                     <Button className="w-full gap-2" variant="destructive" onClick={() => fetchSimulations()}>
+                     <Button 
+                       className="w-full gap-2" 
+                       variant="destructive" 
+                       onClick={(e) => {
+                         e.preventDefault();
+                         e.stopPropagation();
+                         toast.error(`Build Error: ${sim.errorLog || 'Unknown error'}`);
+                       }}
+                     >
                         <RotateCcw className="w-4 h-4" /> View Error
                      </Button>
                   ) : (

@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
-import { ChevronLeft, Maximize2, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Maximize2, RotateCcw, Trash2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function SimulationPlayer() {
   const { simId } = useParams();
@@ -56,6 +57,30 @@ export default function SimulationPlayer() {
           <Button variant="outline" size="sm" onClick={toggleFullscreen}>
             <Maximize2 className="w-4 h-4 mr-2" />
             Fullscreen
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+            onClick={async () => {
+              if (confirm(`Are you sure you want to delete ${simId.replace(/-/g, ' ')}?`)) {
+                try {
+                   const res = await fetch(`/api/delete-simulation/${encodeURIComponent(simId)}`, { method: 'POST' });
+                   if (res.ok) {
+                       toast.success('Simulation deleted');
+                       navigate('/');
+                   } else {
+                       const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+                       toast.error(errorData.error || 'Failed to delete simulation');
+                   }
+                } catch (e) {
+                   toast.error('Failed to delete simulation due to connection error');
+                }
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete
           </Button>
         </div>
       </div>
