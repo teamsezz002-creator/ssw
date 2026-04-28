@@ -37,8 +37,13 @@ service cloud.firestore {
 
     // 2. Simulations Collection (Publicly readable, admin uploadable)
     match /simulations/{simId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn(); // In a real app, restrict to Admin role
+      allow read: if true;
+      allow write: if true; 
+
+      match /files/{fileId=**} {
+        allow read: if true;
+        allow write: if true;
+      }
     }
 
     // 3. Sessions Collection
@@ -65,6 +70,16 @@ service cloud.firestore {
     match /progress/{progressId} {
       allow read: if isSignedIn() && (progressId.startsWith(request.auth.uid) || resource.data.userId == request.auth.uid);
       allow create, update: if isSignedIn() && incoming().userId == request.auth.uid;
+    }
+
+    // 5. Global Events Collection
+    match /events/{eventId} {
+      allow read, write: if true;
+    }
+
+    // 6. Test Collection
+    match /test/{docId} {
+      allow read: if true;
     }
   }
 }

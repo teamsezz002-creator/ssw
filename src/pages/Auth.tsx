@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { auth } from '../lib/firebase';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, GithubAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/card';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { Github, Chrome } from 'lucide-react';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -21,6 +22,33 @@ export default function Auth() {
       navigate('/');
     } catch (e: any) {
       toast.error(e.message);
+    }
+  };
+
+  const handleGithubSignIn = async () => {
+    try {
+      const provider = new GithubAuthProvider();
+      // Request repo scope to list and fetch code
+      provider.addScope('repo');
+      const result = await signInWithPopup(auth, provider);
+      const credential = GithubAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
+      
+      if (token) {
+        localStorage.setItem('gh_token', token);
+      }
+      
+      toast.success('GitHub signed in successfully');
+      navigate('/import');
+    } catch (e: any) {
+      if (e.code === 'auth/operation-not-allowed') {
+        toast.error('GitHub provider is not enabled in Firebase Console. Please enable it and use this callback URL in your GitHub app settings: https://gen-lang-client-0945043157.firebaseapp.com/__/auth/handler', { duration: 10000 });
+      } else if (e.code === 'auth/account-exists-with-different-credential') {
+        toast.error('This email is already linked to Google login. Please sign in with Google first, then you can connect GitHub from the Import page.', { duration: 8000 });
+      } else {
+        toast.error(e.message);
+      }
+      console.error('Auth error:', e);
     }
   };
 
@@ -83,9 +111,14 @@ export default function Auth() {
             </div>
           </div>
           
-          <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-            Google
-          </Button>
+          <div className="grid grid-cols-2 gap-4">
+            <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
+              <Chrome className="mr-2 h-4 w-4" /> Google
+            </Button>
+            <Button variant="outline" className="w-full" onClick={handleGithubSignIn}>
+              <Github className="mr-2 h-4 w-4" /> GitHub
+            </Button>
+          </div>
         </CardContent>
         <CardFooter className="justify-center">
           <Button variant="link" onClick={() => setIsLogin(!isLogin)}>

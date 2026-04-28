@@ -20,7 +20,7 @@ export default function SimulationPlayer() {
 
   if (!simId || !user) return null;
 
-  const simUrl = `/simulations/${simId}/index.html?userId=${user.uid}&simId=${simId}`;
+  const simUrl = `/api/simRender/${simId}/index.html?userId=${user.uid}&simId=${simId}`;
 
   const toggleFullscreen = () => {
     if (iframeRef.current) {
@@ -102,7 +102,7 @@ export default function SimulationPlayer() {
             } catch(e) {}
           }}
           onError={() => setError("The simulation could not be loaded. Please check the upload integrity.")}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; bluetooth; usb; serial"
           allowFullScreen
         />
       </div>

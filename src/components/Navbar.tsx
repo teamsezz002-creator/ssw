@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../lib/firebase';
 import { Button } from './ui/button';
-import { LayoutDashboard, Home, LogOut, Terminal } from 'lucide-react';
+import { LayoutDashboard, Home, LogOut, Terminal, Github } from 'lucide-react';
 
 export default function Navbar() {
   const { user } = useAuth();
@@ -26,6 +26,10 @@ export default function Navbar() {
             <Button variant="ghost" size="sm" className="gap-2" nativeButton={false} render={<Link to="/" />}>
               <Home className="w-4 h-4" />
               Home
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" nativeButton={false} render={<Link to="/import" />}>
+              <Github className="w-4 h-4" />
+              Import
             </Button>
             <Button variant="ghost" size="sm" className="gap-2" nativeButton={false} render={<Link to="/dashboard" />}>
               <LayoutDashboard className="w-4 h-4" />

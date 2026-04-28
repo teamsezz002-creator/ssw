@@ -12,6 +12,7 @@ interface Simulation {
   id: string;
   title: string;
   path: string;
+  status?: string;
 }
 
 export default function Home() {
@@ -32,6 +33,16 @@ export default function Home() {
 
   useEffect(() => {
     fetchSimulations();
+    // Auto refresh while building
+    const interval = setInterval(() => {
+      setSimulations((current) => {
+        if (current.some(s => s.status === 'building')) {
+          fetchSimulations();
+        }
+        return current;
+      });
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -157,15 +168,39 @@ export default function Home() {
                   <CardDescription>Interactive scientific model</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="aspect-video bg-neutral-100 rounded-md flex items-center justify-center">
-                    <Terminal className="w-12 h-12 text-neutral-300" />
+                  <div className="aspect-video bg-neutral-100 rounded-md flex items-center justify-center flex-col relative overflow-hidden">
+                    {sim.status === 'building' ? (
+                      <>
+                        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-2" />
+                        <span className="text-xs font-semibold text-blue-600 animate-pulse">Building...</span>
+                      </>
+                    ) : sim.status === 'error' ? (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-col mb-2 text-red-500">
+                          !
+                        </div>
+                        <span className="text-xs font-semibold text-red-600">Build Failed</span>
+                      </>
+                    ) : (
+                      <Terminal className="w-12 h-12 text-neutral-300" />
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button className="w-full gap-2" nativeButton={false} render={<Link to={`/${sim.id}`} />}>
-                    <Play className="w-4 h-4 fill-current" />
-                    Start Simulation
-                  </Button>
+                  {sim.status === 'building' ? (
+                     <Button className="w-full gap-2" disabled>
+                        Building Deployment...
+                     </Button>
+                  ) : sim.status === 'error' ? (
+                     <Button className="w-full gap-2" variant="destructive" onClick={() => fetchSimulations()}>
+                        <RotateCcw className="w-4 h-4" /> View Error
+                     </Button>
+                  ) : (
+                    <Button className="w-full gap-2" nativeButton={false} render={<Link to={`/${sim.id}`} />}>
+                      <Play className="w-4 h-4 fill-current" />
+                      Start Simulation
+                    </Button>
+                  )}
                 </CardFooter>
               </Card>
             </motion.div>

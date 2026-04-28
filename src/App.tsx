@@ -10,6 +10,7 @@ import Home from './pages/Home';
 import SimulationPlayer from './pages/SimulationPlayer';
 import Dashboard from './pages/Dashboard';
 import Auth from './pages/Auth';
+import GitHubImport from './pages/GitHubImport';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
               <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+              <Route path="/import" element={<PrivateRoute><GitHubImport /></PrivateRoute>} />
               <Route path="/:simId" element={<PrivateRoute><SimulationPlayer /></PrivateRoute>} />
             </Routes>
           </main>
