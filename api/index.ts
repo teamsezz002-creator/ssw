@@ -4,7 +4,7 @@ import AdmZip from "adm-zip";
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
-import { getSimulations, getSimulation, saveSimulation, deleteSimulation, getEvents, saveEvent } from "./db.js";
+import { getSimulations, getSimulation, saveSimulation, deleteSimulation, getEvents, saveEvent } from "./db.ts";
 
 const router = express.Router();
 
@@ -239,9 +239,6 @@ router.post("/create-sample", async (req: Request, res: Response) => {
 });
 
 async function triggerRepoImport(simId: string, repoFullName: string, token?: string) {
-  const log = (msg: string) => console.log(`[Import-${simId}] ${msg}`);
-  log("Starting import...");
-  
   const simDir = path.join(UPLOADS_DIR, simId);
   if (fs.existsSync(simDir)) fs.rmSync(simDir, { recursive: true });
   fs.mkdirSync(simDir, { recursive: true });
@@ -255,25 +252,40 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
   if (token) headers['Authorization'] = `token ${token}`;
 
   let zipUrl = `https://api.github.com/repos/${repoFullName}/zipball/main`;
-  log(`Fetching zip from ${zipUrl}`);
   let res1 = await fetch(zipUrl, { method: "GET", headers, redirect: 'manual' });
   
   if (res1.status === 404) {
       zipUrl = `https://api.github.com/repos/${repoFullName}/zipball/master`;
-      log(`Fetching zip from ${zipUrl}`);
       res1 = await fetch(zipUrl, { method: "GET", headers, redirect: 'manual' });
   }
 
   if (![301, 302].includes(res1.status)) {
-      throw new Error(`GitHub API Error: ${res1.status} ${await res1.text()}`);
+      const contentType = res1.headers.get("content-type");
+      let message;
+      if (contentType && contentType.includes("application/json")) {
+          const json = await res1.json();
+          message = json.message || JSON.stringify(json);
+      } else {
+          message = await res1.text();
+      }
+      throw new Error(`GitHub API Error (${res1.status}): ${message}`);
   }
 
   const location = res1.headers.get('location');
   if (!location) throw new Error("Could not get zipball location");
   
-  log(`Downloading zip from location...`);
   const zipRes = await fetch(location);
-  if (!zipRes.ok) throw new Error("Could not download zipball");
+  if (!zipRes.ok) {
+      const contentType = zipRes.headers.get("content-type");
+      let message;
+      if (contentType && contentType.includes("application/json")) {
+          const json = await zipRes.json();
+          message = json.message || JSON.stringify(json);
+      } else {
+          message = await zipRes.text();
+      }
+      throw new Error(`GitHub Download Link Error (${zipRes.status}): ${message}`);
+  }
   
   const zipPath = path.join(simDir, "temp.zip");
   const destStream = fs.createWriteStream(zipPath);
@@ -288,15 +300,9 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
       destStream.on('error', reject);
   });
   
-  log("Zip downloaded, extracting...");
   const zip = new AdmZip(zipPath);
-  try {
-    zip.extractAllTo(repoDir, true);
-  } catch (e) {
-    throw new Error(`Extraction failed: ${(e as Error).message}`);
-  }
+  zip.extractAllTo(repoDir, true);
   
-  log("Extraction complete. Identifying build directory...");
   let buildDir = repoDir;
   const contents = fs.readdirSync(repoDir);
   if (contents.length > 0 && fs.statSync(path.join(repoDir, contents[0])).isDirectory()) {
@@ -306,7 +312,6 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
   const sim = await getSimulation(simId);
   if (sim) { sim.buildDir = buildDir; await saveSimulation(sim); }
   
-  log(`Build dir identified: ${buildDir}. Triggering build...`);
   startBuild(simId, buildDir);
 }
 

@@ -232,9 +232,11 @@ export default function Home() {
                         <RotateCcw className="w-4 h-4" /> View Error
                      </Button>
                   ) : (
-                    <Button className="w-full gap-2" nativeButton={false} render={<Link to={`/${sim.id}`} />}>
-                      <Play className="w-4 h-4 fill-current" />
-                      Start Simulation
+                    <Button className="w-full gap-2" asChild>
+                      <Link to={`/${sim.id}`}>
+                        <Play className="w-4 h-4 fill-current" />
+                        Start Simulation
+                      </Link>
                     </Button>
                   )}
                 </CardFooter>

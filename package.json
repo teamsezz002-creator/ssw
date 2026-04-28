@@ -15,6 +15,7 @@
     "@base-ui/react": "^1.4.1",
     "@fontsource-variable/geist": "^5.2.8",
     "@google/genai": "^1.29.0",
+    "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.1.14",
     "@types/adm-zip": "^0.5.8",
     "@types/multer": "^2.1.0",

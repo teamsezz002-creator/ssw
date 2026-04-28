@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, orderBy, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, orderBy, getDocFromServer } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 
@@ -11,11 +11,21 @@ try {
   firebaseConfig = {}; // App will likely crash if used without config, but we have it.
 }
 
-const app = initializeApp(firebaseConfig);
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+} catch (e) {
+  console.error("Firebase init error:", e);
+  // Create a mock app or handle gracefully
+  app = null;
+}
 // @ts-ignore
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = app ? initializeFirestore(app, {
+  ignoreUndefinedProperties: true,
+}, firebaseConfig.firestoreDatabaseId || "(default)") : null;
 
 export async function getSimulations() {
+  if (!db) return [];
   try {
     const q = query(collection(db, "simulations"));
     const snapshot = await getDocs(q);
@@ -27,6 +37,7 @@ export async function getSimulations() {
 }
 
 export async function getSimulation(simId: string) {
+  if (!db) return null;
   try {
     const d = await getDoc(doc(db, "simulations", simId));
     return d.exists() ? d.data() : null;
@@ -37,6 +48,7 @@ export async function getSimulation(simId: string) {
 }
 
 export async function saveSimulation(sim: any) {
+  if (!db) return;
   try {
     await setDoc(doc(db, "simulations", sim.id), sim, { merge: true });
   } catch (err) {
@@ -45,6 +57,7 @@ export async function saveSimulation(sim: any) {
 }
 
 export async function deleteSimulation(simId: string) {
+  if (!db) return;
   try {
     await deleteDoc(doc(db, "simulations", simId));
   } catch (err) {
@@ -53,6 +66,7 @@ export async function deleteSimulation(simId: string) {
 }
 
 export async function getEvents() {
+    if (!db) return [];
     try {
       const q = query(collection(db, "events"));
       const snapshot = await getDocs(q);
@@ -64,6 +78,7 @@ export async function getEvents() {
 }
   
 export async function saveEvent(event: any) {
+    if (!db) return;
     try {
       await setDoc(doc(db, "events", event.id), event);
     } catch (err) {

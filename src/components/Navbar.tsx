@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../lib/firebase';
 import { Button } from './ui/button';
-import { LayoutDashboard, Home, LogOut, Terminal, Github } from 'lucide-react';
+import { LayoutDashboard, Home, LogOut, Terminal, Github, Globe } from 'lucide-react';
 
 export default function Navbar() {
   const { user } = useAuth();
@@ -23,17 +23,29 @@ export default function Navbar() {
 
         {user && (
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" className="gap-2" nativeButton={false} render={<Link to="/" />}>
-              <Home className="w-4 h-4" />
-              Home
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link to="/">
+                <Home className="w-4 h-4" />
+                Home
+              </Link>
             </Button>
-            <Button variant="ghost" size="sm" className="gap-2" nativeButton={false} render={<Link to="/import" />}>
-              <Github className="w-4 h-4" />
-              Import
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link to="/import">
+                <Github className="w-4 h-4" />
+                Import
+              </Link>
             </Button>
-            <Button variant="ghost" size="sm" className="gap-2" nativeButton={false} render={<Link to="/dashboard" />}>
-              <LayoutDashboard className="w-4 h-4" />
-              Analytics
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link to="/portal">
+                <Globe className="w-4 h-4" />
+                Portal
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link to="/dashboard">
+                <LayoutDashboard className="w-4 h-4" />
+                Analytics
+              </Link>
             </Button>
             <div className="h-6 w-[1px] bg-neutral-200 mx-2" />
             <span className="text-sm text-neutral-500 mr-2 hidden sm:inline">
