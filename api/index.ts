@@ -239,6 +239,9 @@ router.post("/create-sample", async (req: Request, res: Response) => {
 });
 
 async function triggerRepoImport(simId: string, repoFullName: string, token?: string) {
+  const log = (msg: string) => console.log(`[Import-${simId}] ${msg}`);
+  log("Starting import...");
+  
   const simDir = path.join(UPLOADS_DIR, simId);
   if (fs.existsSync(simDir)) fs.rmSync(simDir, { recursive: true });
   fs.mkdirSync(simDir, { recursive: true });
@@ -252,10 +255,12 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
   if (token) headers['Authorization'] = `token ${token}`;
 
   let zipUrl = `https://api.github.com/repos/${repoFullName}/zipball/main`;
+  log(`Fetching zip from ${zipUrl}`);
   let res1 = await fetch(zipUrl, { method: "GET", headers, redirect: 'manual' });
   
   if (res1.status === 404) {
       zipUrl = `https://api.github.com/repos/${repoFullName}/zipball/master`;
+      log(`Fetching zip from ${zipUrl}`);
       res1 = await fetch(zipUrl, { method: "GET", headers, redirect: 'manual' });
   }
 
@@ -266,6 +271,7 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
   const location = res1.headers.get('location');
   if (!location) throw new Error("Could not get zipball location");
   
+  log(`Downloading zip from location...`);
   const zipRes = await fetch(location);
   if (!zipRes.ok) throw new Error("Could not download zipball");
   
@@ -282,9 +288,15 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
       destStream.on('error', reject);
   });
   
+  log("Zip downloaded, extracting...");
   const zip = new AdmZip(zipPath);
-  zip.extractAllTo(repoDir, true);
+  try {
+    zip.extractAllTo(repoDir, true);
+  } catch (e) {
+    throw new Error(`Extraction failed: ${(e as Error).message}`);
+  }
   
+  log("Extraction complete. Identifying build directory...");
   let buildDir = repoDir;
   const contents = fs.readdirSync(repoDir);
   if (contents.length > 0 && fs.statSync(path.join(repoDir, contents[0])).isDirectory()) {
@@ -294,6 +306,7 @@ async function triggerRepoImport(simId: string, repoFullName: string, token?: st
   const sim = await getSimulation(simId);
   if (sim) { sim.buildDir = buildDir; await saveSimulation(sim); }
   
+  log(`Build dir identified: ${buildDir}. Triggering build...`);
   startBuild(simId, buildDir);
 }
 
